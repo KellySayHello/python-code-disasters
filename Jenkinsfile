@@ -17,11 +17,12 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                    // REMOVED: def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
                     withSonarQubeEnv('sonar') {
                         sh """
                             export SONAR_SCANNER_OPTS="-Xmx1024m"
-                            ${scannerHome}/bin/sonar-scanner \
+                            # Changed to use 'sonar-scanner' directly from PATH:
+                            sonar-scanner \ 
                             -Dsonar.projectKey=my-project-key \
                             -Dsonar.sources=. \
                             -Dsonar.host.url=$SONAR_HOST_URL \
