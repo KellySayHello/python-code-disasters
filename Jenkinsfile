@@ -2,14 +2,20 @@ pipeline {
     agent any
 
     environment {
+        // Defined in Kubernetes Deployment, but safe to set here for visibility/override
         SONAR_HOST_URL = "http://sonarqube:9000"
-        SONAR_AUTH_TOKEN = "admin"  // skip if no auth
-        BUCKET = "my-gcs-bucket"
+        SONAR_AUTH_TOKEN = "admin"  // Used as placeholder, but authentication is disabled
+        BUCKET = "my-gcs-bucket-for-data" // GCS bucket created by Terraform
+        DATAPROC_CLUSTER = "mapreduce-cluster-name" // Dataproc cluster name
+        DATAPROC_REGION = "us-central1" // Dataproc region
+        HADOOP_INPUT_PATH = "gs://${BUCKET}/repo-${BUILD_NUMBER}/files/"
+        HADOOP_OUTPUT_PATH = "gs://${BUCKET}/output-${BUILD_NUMBER}/"
     }
 
     stages {
         stage('Checkout') {
             steps {
+                // Clones the 'master' branch due to your job configuration
                 checkout scm
             }
         }
@@ -17,40 +23,84 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    // REMOVED: def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                    withSonarQubeEnv('sonar') {
+                    // Inject SonarQube credentials (not needed if auth is off, but good practice)
+                    withSonarQubeEnv('SonarQube Server') { 
                         sh """
-                            export SONAR_SCANNER_OPTS="-Xmx1024m"
-                            # Changed to use 'sonar-scanner' directly from PATH:
-                            sonar-scanner \ 
-                            -Dsonar.projectKey=my-project-key \
+                            # Execute sonar-scanner (uses path set in Dockerfile)
+                            sonar-scanner \
+                            -Dsonar.projectKey=python-code-disasters \
                             -Dsonar.sources=. \
-                            -Dsonar.host.url=$SONAR_HOST_URL \
-                            -Dsonar.login=$SONAR_AUTH_TOKEN
+                            -Dsonar.host.url=${SONAR_HOST_URL} \
+                            -Dsonar.login=${SONAR_AUTH_TOKEN}
                         """
                     }
                 }
             }
         }
 
-        stage('Quality Gate') {
+        stage('Quality Gate Check') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                script {
+                    // This pauses the pipeline until SonarQube reports back.
+                    // If a BLOCKED issue is found, the pipeline ABORTS here.
+                    timeout(time: 5, unit: 'MINUTES') {
+                        waitForQualityGate abortPipeline: true
+                    }
                 }
             }
         }
 
-        stage('Prepare files for Hadoop') {
+        stage('Prepare and Run Hadoop Job') {
+            when {
+                // Only runs if the previous 'Quality Gate Check' stage SUCCEEDED (no blockers)
+                expression { return currentBuild.result == 'SUCCESS' }
+            }
             steps {
                 script {
-                    sh '''
-                        BUILD_ID=${BUILD_NUMBER}
-                        gsutil -m cp -r . gs://${BUCKET}/repo-${BUILD_ID}/files/
+                    // 1. Upload source code and MapReduce scripts to GCS
+                    sh """
+                        # Recursively copy all repository files to a unique GCS input path
+                        gsutil -m cp -r . ${HADOOP_INPUT_PATH}
+                        
+                        # Copy mapper/reducer to GCS where Dataproc can access them
                         gsutil cp hadoop/mapper.py gs://${BUCKET}/mapper.py
                         gsutil cp hadoop/reducer.py gs://${BUCKET}/reducer.py
-                        echo "Uploaded files to GCS. Run Hadoop job manually if needed."
-                    '''
+                        
+                        echo "Uploaded files to GCS for MapReduce input."
+                    """
+                    
+                    // 2. Submit the MapReduce Job to Dataproc (GCloud CLI is in your Docker image)
+                    sh """
+                        gcloud dataproc jobs submit hadoop \
+                        --cluster=${DATAPROC_CLUSTER} \
+                        --region=${DATAPROC_REGION} \
+                        --class=org.apache.hadoop.streaming.StreamJob \
+                        --jars=gs://goog-dataproc-submit/job/hadoop-streaming-2.7.3.jar \
+                        -- \
+                        -mapper gs://${BUCKET}/mapper.py \
+                        -reducer gs://${BUCKET}/reducer.py \
+                        -input ${HADOOP_INPUT_PATH} \
+                        -output ${HADOOP_OUTPUT_PATH}
+                        
+                        echo "Hadoop job submitted. Output will be in ${HADOOP_OUTPUT_PATH}"
+                    """
+                }
+            }
+        }
+
+        stage('Display Results') {
+            when {
+                // Only display if the Hadoop job was executed
+                expression { return currentBuild.result == 'SUCCESS' }
+            }
+            steps {
+                script {
+                    // 1. Download the MapReduce output from GCS
+                    sh "gsutil cp ${HADOOP_OUTPUT_PATH}part-*-00000 ./mapreduce_output.txt"
+                    
+                    // 2. Display the final result (as required by the prompt)
+                    echo "--- MapReduce Line Count Results ---"
+                    sh "cat mapreduce_output.txt"
                 }
             }
         }
