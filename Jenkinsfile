@@ -4,7 +4,6 @@ pipeline {
     environment {
         // Defined in Kubernetes Deployment, but safe to set here for visibility/override
         SONAR_HOST_URL = "http://sonarqube:9000"
-        SONAR_AUTH_TOKEN = "admin"  // Used as placeholder, but authentication is disabled
         BUCKET = "my-gcs-bucket-for-data" // GCS bucket created by Terraform
         DATAPROC_CLUSTER = "mapreduce-cluster-name" // Dataproc cluster name
         DATAPROC_REGION = "us-central1" // Dataproc region
@@ -31,7 +30,6 @@ pipeline {
                             -Dsonar.projectKey=python-code-disasters \
                             -Dsonar.sources=. \
                             -Dsonar.host.url=${SONAR_HOST_URL} \
-                            -Dsonar.login=${SONAR_AUTH_TOKEN}
                         """
                     }
                 }
