@@ -3,6 +3,7 @@ pipeline {
 
     environment {
         SONAR_HOST_URL = "http://sonarqube:9000"
+        SONAR_AUTH_TOKEN = "admin"  // skip if no auth
         BUCKET = "my-gcs-bucket"
     }
 
