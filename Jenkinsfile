@@ -22,20 +22,24 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    // Inject SonarQube credentials (not needed if auth is off, but good practice)
-                    withSonarQubeEnv('SonarQube Server') { 
-                        sh """
-                            # Execute sonar-scanner (uses path set in Dockerfile)
-                            sonar-scanner \
+                    def result = sh(
+                        script: """
+                        sonar-scanner \
                             -Dsonar.projectKey=python-code-disasters \
                             -Dsonar.sources=. \
                             -Dsonar.host.url=${SONAR_HOST_URL} \
                             -Dsonar.login=admin \
                             -Dsonar.password=admin \
                             -Dsonar.qualitygate.wait=true
-                        """
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    echo result
+
+                    if (result.contains("QUALITY GATE STATUS: FAILED")) {
+                        error("Quality Gate failed, aborting pipeline")
                     }
-                    waitForQualityGate abortPipeline: true
                 }
             }
         }
