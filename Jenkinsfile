@@ -30,8 +30,10 @@ pipeline {
                             -Dsonar.projectKey=python-code-disasters \
                             -Dsonar.sources=. \
                             -Dsonar.host.url=${SONAR_HOST_URL} \
+                            -Dsonar.qualitygate.wait=true
                         """
                     }
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
