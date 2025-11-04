@@ -51,10 +51,6 @@ pipeline {
         }
 
         stage('Prepare and Run Hadoop Job') {
-            when {
-                // Only runs if the previous 'Quality Gate Check' stage SUCCEEDED (no blockers)
-                expression { return currentBuild.result == 'SUCCESS' }
-            }
             steps {
                 script {
                     // 1. Upload source code and MapReduce scripts to GCS
@@ -89,10 +85,6 @@ pipeline {
         }
 
         stage('Display Results') {
-            when {
-                // Only display if the Hadoop job was executed
-                expression { return currentBuild.result == 'SUCCESS' }
-            }
             steps {
                 script {
                     // 1. Download the MapReduce output from GCS
