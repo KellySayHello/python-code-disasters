@@ -31,7 +31,7 @@ pipeline {
                             -Dsonar.sources=. \
                             -Dsonar.host.url=${SONAR_HOST_URL} \
                             -Dsonar.login=admin \
-                            -Dsonar.password=admin2 \
+                            -Dsonar.password=admin \
                             -Dsonar.qualitygate.wait=true
                         """
                     }
