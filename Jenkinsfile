@@ -37,7 +37,7 @@ pipeline {
 
                     echo result
 
-                    if (result.contains("QUALITY GATE STATUS: PASSED")) {
+                    if (result.contains("QUALITY GATE STATUS: FAILED")) {
                         error("Quality Gate failed, aborting pipeline")
                     }
                 }
