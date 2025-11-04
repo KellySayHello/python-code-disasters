@@ -30,6 +30,8 @@ pipeline {
                             -Dsonar.projectKey=python-code-disasters \
                             -Dsonar.sources=. \
                             -Dsonar.host.url=${SONAR_HOST_URL} \
+                            -Dsonar.login=admin \
+                            -Dsonar.password=admin2 \
                             -Dsonar.qualitygate.wait=true
                         """
                     }
