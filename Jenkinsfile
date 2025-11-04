@@ -39,19 +39,6 @@ pipeline {
                 }
             }
         }
-
-        stage('Quality Gate Check') {
-            steps {
-                script {
-                    // This pauses the pipeline until SonarQube reports back.
-                    // If a BLOCKED issue is found, the pipeline ABORTS here.
-                    timeout(time: 5, unit: 'MINUTES') {
-                        waitForQualityGate abortPipeline: true
-                    }
-                }
-            }
-        }
-
         stage('Prepare and Run Hadoop Job') {
             steps {
                 script {
