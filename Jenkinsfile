@@ -46,6 +46,7 @@ pipeline {
         stage('Prepare and Run Hadoop Job') {
             steps {
                 script {
+                    sh 'terraform init'
                     // 1. Upload source code and MapReduce scripts to GCS
                     sh """
                         # Recursively copy all repository files to a unique GCS input path
