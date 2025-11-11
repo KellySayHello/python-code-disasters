@@ -4,9 +4,9 @@ pipeline {
     environment {
         // Defined in Kubernetes Deployment, but safe to set here for visibility/override
         SONAR_HOST_URL = "http://sonarqube:9000"
-        BUCKET = "adroit-agent-471721-t7-job-bucket" // GCS bucket created by Terraform
-        DATAPROC_CLUSTER = "hadoop-cluster" // Dataproc cluster name
-        DATAPROC_REGION = "us-central1" // Dataproc region
+        BUCKET = "${env.BUCKET}"                      // GCS bucket created by Terraform
+        DATAPROC_CLUSTER = "${env.DATAPROC_CLUSTER}"  // Dataproc cluster name
+        DATAPROC_REGION = "${env.DATAPROC_REGION}"    // Dataproc region
         HADOOP_INPUT_PATH = "gs://${BUCKET}/repo-${BUILD_NUMBER}/files/"
         HADOOP_OUTPUT_PATH = "gs://${BUCKET}/output-${BUILD_NUMBER}/"
     }
@@ -14,7 +14,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // Clones the 'master' branch due to your job configuration
+                // Clones the 'master' branch from GitHub repo
                 checkout scm
             }
         }
@@ -43,11 +43,11 @@ pipeline {
                 }
             }
         }
+
         stage('Prepare and Run Hadoop Job') {
             steps {
                 script {
-                    sh 'terraform init'
-                    // 1. Upload source code and MapReduce scripts to GCS
+                    // Upload source code and MapReduce scripts to GCS
                     sh """
                         # Recursively copy all repository files to a unique GCS input path
                         gsutil -m cp -r . ${HADOOP_INPUT_PATH}
@@ -59,18 +59,20 @@ pipeline {
                         echo "Uploaded files to GCS for MapReduce input."
                     """
                     
-                    // 2. Submit the MapReduce Job to Dataproc (GCloud CLI is in your Docker image)
+                    // Submit the MapReduce Job to Dataproc
                     sh """
-                        gcloud dataproc jobs submit hadoop \
+                        gcloud \
+                        dataproc jobs submit hadoop \
                         --cluster=${DATAPROC_CLUSTER} \
                         --region=${DATAPROC_REGION} \
-                        --class=org.apache.hadoop.streaming.StreamJob \
-                        --jars=gs://goog-dataproc-submit/job/hadoop-streaming-2.7.3.jar \
+                        --jar=file:///usr/lib/hadoop-mapreduce/hadoop-streaming.jar \
                         -- \
-                        -mapper gs://${BUCKET}/mapper.py \
-                        -reducer gs://${BUCKET}/reducer.py \
+                        -D mapreduce.input.fileinputformat.input.dir.recursive=true \
+                        -files gs://${BUCKET}/mapper.py,gs://${BUCKET}/reducer.py \
                         -input ${HADOOP_INPUT_PATH} \
-                        -output ${HADOOP_OUTPUT_PATH}
+                        -output ${HADOOP_OUTPUT_PATH} \
+                        -mapper "python3 mapper.py" \
+                        -reducer "python3 reducer.py"
                         
                         echo "Hadoop job submitted. Output will be in ${HADOOP_OUTPUT_PATH}"
                     """
@@ -81,12 +83,8 @@ pipeline {
         stage('Display Results') {
             steps {
                 script {
-                    // 1. Download the MapReduce output from GCS
-                    sh "gsutil cp ${HADOOP_OUTPUT_PATH}part-*-00000 ./mapreduce_output.txt"
-                    
-                    // 2. Display the final result (as required by the prompt)
                     echo "--- MapReduce Line Count Results ---"
-                    sh "cat mapreduce_output.txt"
+                    sh "gsutil cat ${HADOOP_OUTPUT_PATH}part-*"
                 }
             }
         }
